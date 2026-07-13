@@ -48,7 +48,7 @@ validation_ds=keras.utils.image_dataset_from_directory(
      image_size=(256,256),
      shuffle=  False
 )
-
+class_names = validation_ds.class_names
 
 # 4. preprocessing
 
@@ -273,30 +273,34 @@ plt.show()
 
 
 
+
 #show wrong predicted images 
 plt.figure(figsize=(15,10))
 
 count = 0
 
 for images, labels in validation_ds:
-
     probs = model.predict(images, verbose=0)
-
     preds = (probs >= 0.5).astype(int)
 
     for i in range(len(images)):
-
         if preds[i] != labels[i]:
-
-            plt.subplot(3,3,count+1)
-
-            plt.imshow(images[i].numpy())
+            plt.subplot(3, 3, count + 1)
+            
+            # --- FIXED IMAGE RENDERING HERE ---
+            img_to_show = images[i].numpy()
+            if img_to_show.max() <= 1.0:
+                img_to_show = (img_to_show * 255).astype('uint8')
+            else:
+                img_to_show = img_to_show.astype('uint8')
+                
+            plt.imshow(img_to_show)
+            # ----------------------------------
 
             true_class = class_names[int(labels[i])]
-            pred_class = class_names[int(preds[i])]
+            pred_class = class_names[int(preds[i][0])]
 
             confidence = probs[i][0]
-
             if pred_class == class_names[0]:
                 confidence = 1 - confidence
 
@@ -306,32 +310,14 @@ for images, labels in validation_ds:
                 f"{confidence*100:.2f}%",
                 color="red"
             )
-
             plt.axis("off")
-
             count += 1
-
-            if count == 9:
-                break
-
-    if count == 9:
-        break
+            if count == 9: break
+    if count == 9: break
 
 plt.tight_layout()
 
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
