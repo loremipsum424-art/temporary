@@ -171,3 +171,185 @@ plt.show()
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# predict on the dataset 
+
+
+import numpy as np
+from sklearn.metrics import classification_report, confusion_matrix
+import matplotlib.pyplot as plt
+
+# Predict probabilities
+predictions = model.predict(validation_ds)
+
+# Convert probability -> class (0 or 1)
+predicted_labels = (predictions >= 0.5).astype(int).flatten()
+
+print("Prediction Shape :", predictions.shape)
+print("First 10 Probabilities:\n", predictions[:10])
+
+
+#get true label 
+
+true_labels = []
+
+for images, labels in validation_ds:
+    true_labels.extend(labels.numpy())
+
+true_labels = np.array(true_labels)
+
+print("Number of Test Images :", len(true_labels))
+
+
+
+#print classification report 
+class_names = validation_ds.class_names
+
+print("\nClassification Report\n")
+
+print(
+    classification_report(
+        true_labels,
+        predicted_labels,
+        target_names=class_names
+    )
+)
+
+
+
+#plot confusion matrix 
+
+cm = confusion_matrix(true_labels, predicted_labels)
+
+plt.figure(figsize=(6,6))
+
+plt.imshow(cm, cmap="Blues")
+
+plt.title("Confusion Matrix")
+
+plt.xlabel("Predicted Label")
+plt.ylabel("True Label")
+
+plt.xticks([0,1], class_names)
+plt.yticks([0,1], class_names)
+
+for i in range(cm.shape[0]):
+    for j in range(cm.shape[1]):
+        plt.text(
+            j,
+            i,
+            cm[i,j],
+            ha="center",
+            va="center",
+            color="black",
+            fontsize=14
+        )
+
+plt.colorbar()
+
+plt.tight_layout()
+
+plt.show()
+
+
+
+#show wrong predicted images 
+plt.figure(figsize=(15,10))
+
+count = 0
+
+for images, labels in validation_ds:
+
+    probs = model.predict(images, verbose=0)
+
+    preds = (probs >= 0.5).astype(int)
+
+    for i in range(len(images)):
+
+        if preds[i] != labels[i]:
+
+            plt.subplot(3,3,count+1)
+
+            plt.imshow(images[i].numpy())
+
+            true_class = class_names[int(labels[i])]
+            pred_class = class_names[int(preds[i])]
+
+            confidence = probs[i][0]
+
+            if pred_class == class_names[0]:
+                confidence = 1 - confidence
+
+            plt.title(
+                f"True : {true_class}\n"
+                f"Pred : {pred_class}\n"
+                f"{confidence*100:.2f}%",
+                color="red"
+            )
+
+            plt.axis("off")
+
+            count += 1
+
+            if count == 9:
+                break
+
+    if count == 9:
+        break
+
+plt.tight_layout()
+
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
