@@ -2,123 +2,114 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import classification_report, confusion_matrix
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense
-from tensorflow.keras.callbacks import EarlyStopping
 
-# Set random seeds for consistent results
+
+# Set seeds
 np.random.seed(42)
 tf.random.set_seed(42)
 
-# ==========================================
-# 1. DATA PREPARATION (Classification)
-# ==========================================
-from sklearn.datasets import make_classification
+# ---------------------------------------------------------
+# 1. Generate Data (same polynomial curve + noise)
+# ---------------------------------------------------------
+x_data = np.linspace(-3, 3, 500).reshape(-1, 1)
+y_data = x_data**3 - 2 * x_data**2 + x_data + np.random.randn(500, 1) * 2
 
-X, y = make_classification(
-    n_samples=1000,
-    n_features=10,
-    n_classes=2,
-    random_state=42
+# ---------------------------------------------------------
+# 2. Split using sklearn (70% train, 15% val, 15% test)
+# ---------------------------------------------------------
+x_train, x_temp, y_train, y_temp = train_test_split(
+    x_data, y_data, test_size=0.3, random_state=42
+)
+x_val, x_test, y_val, y_test = train_test_split(
+    x_temp, y_temp, test_size=0.5, random_state=42
 )
 
-# 3-Way Stratified Split: 60% train, 20% val, 20% test
-X_temp, X_test, y_temp, y_test = train_test_split(
-    X, y, test_size=0.20, stratify=y, random_state=42
-)
-X_train, X_val, y_train, y_val = train_test_split(
-    X_temp, y_temp, test_size=0.25, stratify=y_temp, random_state=42
-)
+# ---------------------------------------------------------
+# 3. Define Model & R2 Metric
+# ---------------------------------------------------------
+def r2_metric(y_true, y_pred):
+    SS_res = tf.reduce_sum(tf.square(y_true - y_pred))
+    SS_tot = tf.reduce_sum(tf.square(y_true - tf.reduce_mean(y_true)))
+    return (1 - SS_res / (SS_tot + tf.keras.backend.epsilon()))
 
-# Scale features
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_val_scaled = scaler.transform(X_val)
-X_test_scaled = scaler.transform(X_test)
-
-# ==========================================
-# 2. BUILD MODEL (Classification)
-# ==========================================
-model = Sequential([
-    Dense(64, activation='relu', input_shape=(X_train.shape[1],)),
-    Dense(32, activation='relu'),
-    Dense(1, activation='sigmoid')
-])
-
+model = Sequential()
+model.add(Dense(64, activation='relu', input_shape=(1,)))  # Wider first layer
+model.add(Dense(128, activation='relu'))                 # Added extra deep layer
+model.add(Dense(64, activation='relu'))                  # Added extra deep layer
+model.add(Dense(32, activation='relu'))                  # Stepping down gradually
+model.add(Dense(1))                                      # Output layer
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=0.01),
-    loss='binary_crossentropy',
-    metrics=['accuracy']
+    loss='mse',
+    metrics=[r2_metric]
 )
 
-# ==========================================
-# 3. TRAIN WITH VALIDATION
-# ==========================================
-early_stop = EarlyStopping(
-    monitor='val_loss',
-    patience=10,
-    restore_best_weights=True
+# ---------------------------------------------------------
+# 4. Callbacks
+# ---------------------------------------------------------
+early_stop = tf.keras.callbacks.EarlyStopping(
+    monitor='val_loss', patience=150, restore_best_weights=True, verbose=1
 )
 
+reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+    monitor='val_loss', factor=0.5, patience=50, min_lr=1e-6, verbose=1
+)
+
+# ---------------------------------------------------------
+# 5. Train
+# ---------------------------------------------------------
 history = model.fit(
-    X_train_scaled, y_train,
-    validation_data=(X_val_scaled, y_val),
-    epochs=100,
-    batch_size=32,
-    callbacks=[early_stop],
-    verbose=1,
-    shuffle=True
+    x_train, y_train,
+    validation_data=(x_val, y_val),
+    epochs=2000,
+    callbacks=[early_stop, reduce_lr],
+    verbose=1
 )
 
-# ==========================================
-# 4. EVALUATE ON TEST SET + METRICS
-# ==========================================
-# Predict probabilities and convert to class labels
-y_pred_probs = model.predict(X_test_scaled, verbose=0)
-y_pred = (y_pred_probs > 0.5).astype(int).flatten()
+# ---------------------------------------------------------
+# 6. Evaluate
+# ---------------------------------------------------------
+test_loss, test_r2 = model.evaluate(x_test, y_test, verbose=1)
 
-# Test loss & accuracy
-test_loss, test_acc = model.evaluate(X_test_scaled, y_test, verbose=0)
+print("-" * 50)
+print(f"Test Loss (MSE): {test_loss:.4f}")
+print(f"Test R2 Score: {test_r2:.4f}")
+print("-" * 50)
 
-# Precision, Recall, F1
-report = classification_report(y_test, y_pred, digits=4)
-print("\n=== Test Set Performance ===")
-print(f"Test Loss:     {test_loss:.4f}")
-print(f"Test Accuracy: {test_acc:.4f}\n")
-print("Classification Report:")
-print(report)
+# ---------------------------------------------------------
+# 7. Custom Prediction
+# ---------------------------------------------------------
+custom_value = 2.5
+custom_prediction = model.predict(np.array([[custom_value]]), verbose=1)[0][0]
+true_value = custom_value**3 - 2*custom_value**2 + custom_value
 
-# Optional: confusion matrix
-cm = confusion_matrix(y_test, y_pred)
-print("Confusion Matrix:")
-print(cm)
+print(f"Input X = {custom_value}")
+print(f"Predicted Y = {custom_prediction:.4f}")
+print(f"True Y = {true_value:.4f}")
+print("-" * 50)
 
-# ==========================================
-# 5. PLOT LOSS AND ACCURACY
-# ==========================================
+# ---------------------------------------------------------
+# 8. Plot
+# ---------------------------------------------------------
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
 
-# Train vs Val Loss
-plt.figure(figsize=(8, 5))
-plt.plot(history.history['loss'], label='Train Loss')
-plt.plot(history.history['val_loss'], label='Val Loss')
-plt.title('Training and Validation Loss')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.legend()
-plt.grid(True, linestyle='--', alpha=0.7)
-plt.tight_layout()
-plt.show()
+ax1.plot(history.history['loss'], label='Train Loss', color='blue')
+ax1.plot(history.history['val_loss'], label='Validation Loss', color='red')
+ax1.set_title('Train vs Validation Loss (MSE)')
+ax1.set_xlabel('Epochs')
+ax1.set_ylabel('Loss')
+ax1.legend()
+ax1.grid(True)
 
-# Train vs Val Accuracy
-plt.figure(figsize=(8, 5))
-plt.plot(history.history['accuracy'], label='Train Accuracy')
-plt.plot(history.history['val_accuracy'], label='Val Accuracy')
-plt.title('Training and Validation Accuracy')
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.legend()
-plt.grid(True, linestyle='--', alpha=0.7)
+ax2.plot(history.history['r2_metric'], label='Train R2', color='blue')
+ax2.plot(history.history['val_r2_metric'], label='Validation R2', color='red')
+ax2.set_title('Train vs Validation R2 Score')
+ax2.set_xlabel('Epochs')
+ax2.set_ylabel('R2 Score')
+ax2.legend()
+ax2.grid(True)
+
 plt.tight_layout()
 plt.show()
