@@ -30,16 +30,15 @@ x_trainWval, x_test, y_trainWval, y_test = train_test_split(
 # ---------------------------------------------------------
 
 
-model = Sequential()
-model.add(Dense(64, activation="relu", input_shape=(1,)))
-model.add(Dense(128, activation="relu"))
-model.add(Dense(64, activation="relu"))
-model.add(Dense(32, activation="relu"))
-model.add(Dense(1, activation="linear"))
-
+model = Sequential([
+    Dense(64, activation="swish", input_shape=(1,)),  # Swish handles gradients better than ReLU
+    Dense(32, activation="swish"),
+    Dense(16, activation="swish"),
+    Dense(1, activation="linear")
+])
 #compile
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=0.01),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=0.005),
     loss="mse",
     metrics=[tf.keras.metrics.R2Score()]
 )
@@ -60,10 +59,11 @@ reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
 # ---------------------------------------------------------
 history = model.fit(
     x_trainWval, y_trainWval,
-    validation_split=0.2,   # Automatically carves out 20% for validation
-    epochs=100,
-    batch_size=32,
-    shuffle=True            # Shuffles training batches every epoch
+    validation_split=0.2,
+    epochs=300,                 
+    batch_size=16,               
+    shuffle=True,
+    callbacks=[early_stop, reduce_lr]  
 )
 
 # ---------------------------------------------------------
